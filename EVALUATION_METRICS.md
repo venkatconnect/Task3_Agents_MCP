@@ -120,6 +120,154 @@ python -c "from evaluation.dataset import get_evaluation_dataset; import json; p
 python -c "from evaluation.example_results import EXAMPLE_EVALUATION_RESULTS; import json; print(json.dumps(EXAMPLE_EVALUATION_RESULTS, indent=2))"
 ```
 
+### Run Advanced Metrics Analysis
+```bash
+python evaluation/advanced_metrics.py
+```
+
+---
+
+## 📊 Sample Evaluation Report
+
+```
+╒════════════════════════════════════════════════════════════════════════════╕
+│                   EVALUATION EXECUTION REPORT                             │
+╞════════════════════════════════════════════════════════════════════════════╛
+
+🚀 Starting evaluation run...
+
+Running test 1/10: weather_001 ✓
+  ✓ weather_001: Pass Rate: 100%, Avg Score: 1.00
+  Metrics: Classification (1.0), Completeness (1.0), Relevance (0.95), 
+           Tool Usage (1.0), Data Validity (0.9)
+
+Running test 2/10: weather_002 ✓
+  ✓ weather_002: Pass Rate: 80%, Avg Score: 0.85
+  Metrics: Classification (1.0), Completeness (0.8), Relevance (0.9), 
+           Tool Usage (1.0), Data Validity (0.75)
+
+Running test 3/10: weather_003 ✓
+  ✓ weather_003: Pass Rate: 100%, Avg Score: 1.00
+
+Running test 4/10: news_001 ✓
+  ✓ news_001: Pass Rate: 100%, Avg Score: 0.95
+
+Running test 5/10: news_002 ✓
+  ✓ news_002: Pass Rate: 80%, Avg Score: 0.85
+
+Running test 6/10: news_003 ✓
+  ✓ news_003: Pass Rate: 100%, Avg Score: 0.95
+
+Running test 7/10: combined_001 ✓
+  ✓ combined_001: Pass Rate: 100%, Avg Score: 0.95
+
+Running test 8/10: combined_002 ✓
+  ✓ combined_002: Pass Rate: 100%, Avg Score: 0.90
+
+Running test 9/10: edge_001 ✓
+  ✓ edge_001: Pass Rate: 100%, Avg Score: 1.00
+
+Running test 10/10: edge_002 ✓
+  ✓ edge_002: Pass Rate: 80%, Avg Score: 0.85
+
+════════════════════════════════════════════════════════════════════════════
+
+📊 EVALUATION SUMMARY
+════════════════════════════════════════════════════════════════════════════
+
+Overall Pass Rate: 90% (45/50 metrics)
+Overall Average Score: 0.88/1.0
+
+📈 BY METRIC TYPE:
+  ✅ classification: 10/10 passed (100%), Avg Score: 1.00
+  ✅ tool_usage: 10/10 passed (100%), Avg Score: 1.00
+  ✅ relevance: 9/10 passed (90%), Avg Score: 0.91
+  ⚠️  completeness: 8/10 passed (80%), Avg Score: 0.85
+  ⚠️  data_validity: 8/10 passed (80%), Avg Score: 0.82
+
+📂 BY TEST CATEGORY:
+  basic_weather (1/1):      100% ✅
+  weather_forecast (2/2):   100% ✅
+  weather_specific (1/1):   100% ✅
+  category_news (3/3):      100% ✅
+  keyword_search (1/1):     100% ✅
+  multi_agent (2/2):        100% ✅
+
+════════════════════════════════════════════════════════════════════════════
+✨ Evaluation complete!
+════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 📊 Advanced Metrics Analysis Report
+
+```
+══════════════════════════════════════════════════════════════════════════════
+📊 ADVANCED METRICS ANALYSIS REPORT
+══════════════════════════════════════════════════════════════════════════════
+
+🎯 OVERALL PERFORMANCE
+   Pass Rate: 90.0% (45/50)
+   Average Score: 0.88/1.0
+
+📈 SCORE DISTRIBUTION
+   Mean: 0.92
+   Median: 0.91
+   Std Dev: 0.08
+   Range: 0.82 - 1.00
+
+💡 KEY INSIGHTS (6)
+
+   1. 🔵 Strong Overall Performance
+      Pass rate is 90.0% - Exceeds target!
+      → Monitor metrics and focus on edge cases
+
+   2. 🔵 Perfect Classification Score
+      classification achieved 100% pass rate
+      → Maintain classification quality; good model
+
+   3. 🔵 Perfect Tool Usage Score
+      tool_usage achieved 100% pass rate
+      → Maintain tool_usage quality; good model
+
+   4. 🔵 Good Completeness Performance
+      completeness has 80.0% pass rate (8/10 tests)
+      → Minor improvements needed for completeness
+
+   5. 🔵 Good Relevance Performance
+      relevance has 90.0% pass rate (9/10 tests)
+      → Minor improvements needed for relevance
+
+   6. 🔵 Good Data Validity Performance
+      data_validity has 80.0% pass rate (8/10 tests)
+      → Minor improvements needed for data_validity
+
+✅ RECOMMENDATIONS (6)
+   1. Monitor metrics and focus on edge cases
+   2. Maintain classification quality; good model
+   3. Maintain tool_usage quality; good model
+   4. Minor improvements needed for completeness
+   5. Minor improvements needed for relevance
+   6. Minor improvements needed for data_validity
+
+🔄 COMPARATIVE ANALYSIS
+   ⭐ Best: classification (100.0%)
+   ⚠️  Needs Work: completeness (80.0%)
+
+📂 BY CATEGORY
+   Basic Weather: 1/1 (100%)
+   Weather Forecast: 2/2 (100%)
+   Category News: 3/3 (100%)
+   Keyword Search: 1/1 (100%)
+   Multi Agent: 2/2 (100%)
+   Edge Cases: 1/1 (100%)
+
+══════════════════════════════════════════════════════════════════════════════
+✨ Analysis complete!
+══════════════════════════════════════════════════════════════════════════════
+```
+
 ---
 
 ## 📂 Files Reference
