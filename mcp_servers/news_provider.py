@@ -1,17 +1,18 @@
 """
-News API Provider - Completely Free, No API Key Required
+News API Provider - Using NewsAPI.org (Free Tier)
 
-Provides news data via completely free news sources without any API keys.
-Uses Hacker News API (free tier) and NewsData.io (free tier with demo key).
+Provides news data from NewsAPI.org which offers a free tier with API key.
+Register at https://newsapi.org/register to get your free API key.
 
 Tools provided:
-- search_news: Search for news articles
-- get_top_headlines: Get top headlines for a topic  
-- get_news_by_category: Get news by category
+- search_news: Search for news articles by keyword
+- get_top_headlines: Get top headlines for a specific country/category  
+- get_news_by_category: Get news in a specific category
 """
 
 import json
 import logging
+import os
 from typing import Optional
 from datetime import datetime
 import httpx
@@ -21,18 +22,18 @@ from pydantic import BaseModel
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# FREE NEWS SOURCES - NO API KEY REQUIRED
-# Using Hacker News API (completely free, no key needed)
-HACKER_NEWS_API = "https://hacker-news.firebaseio.com/v0"
+# NewsAPI Configuration
+NEWSAPI_BASE_URL = "https://newsapi.org/v2"
+# Get API key from environment variable
+# If not set, provide helpful error message
+NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
 
-# Using NewsData.io (free tier with demo/free key)
-# Demo key is publicly available for testing
-NEWSDATA_API = "https://newsdata.io/api/1"
-NEWSDATA_API_KEY = "demo"  # Free demo key that works without registration
-
-# Using News by Bing (MetaWeather alternative)
-# Using open RSS feeds as backup
-MEDIUM_API = "https://api.medium.com/v1"
+if not NEWSAPI_KEY:
+    logger.warning(
+        "⚠️ NEWSAPI_KEY environment variable not set!\n"
+        "Register at https://newsapi.org/register to get a FREE API key\n"
+        "Then set environment variable: NEWSAPI_KEY=your_api_key_here"
+    )
 
 
 class NewsArticle(BaseModel):
@@ -60,54 +61,103 @@ async def search_news(
     pages: int = 1
 ) -> NewsSearchResult:
     """
-    Search for news articles using NewsData.io API (free tier, no registration needed)
+    Search for news articles by keyword using NewsAPI
     
     Args:
-        query: Search query (e.g., "artificial intelligence")
-        language: Language code (en, fr, de, etc.)
-        sort_by: Sort by 'publishedAt' or 'relevance'
-        pages: Number of pages (max 3 per free tier)
+        query: Search query (e.g., "artificial intelligence", "COVID-19")
+        language: Language code (en, es, fr, de, etc.)
+        sort_by: Sort by 'publishedAt', 'relevancy', or 'popularity'
+        pages: Number of pages (max 5 per free tier)
         
     Returns:
         NewsSearchResult with articles
     """
+    if not NEWSAPI_KEY:
+        logger.error("NEWSAPI_KEY not configured")
+        return NewsSearchResult(
+            articles=[],
+            total_results=0,
+            timestamp=datetime.now().isoformat()
+        )
+    
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # Using NewsData.io free API with demo key
+            # Map sort_by parameter to NewsAPI format
+            sort_mapping = {
+                "publishedAt": "publishedAt",
+                "relevancy": "relevancy",
+                "popularity": "popularity"
+            }
+            newsapi_sort = sort_mapping.get(sort_by, "publishedAt")
+            
+            # Calculate page number (1-indexed for NewsAPI)
+            page_num = pages if pages >= 1 else 1
+            
             response = await client.get(
-                f"{NEWSDATA_API}/news",
+                f"{NEWSAPI_BASE_URL}/everything",
                 params={
                     "q": query,
                     "language": language,
-                    "apikey": NEWSDATA_API_KEY,
-                    "sort": sort_by,
-                    "limit": min(pages * 10, 40)
-                }
+                    "sortBy": newsapi_sort,
+                    "page": page_num,
+                    "pageSize": min(100, 20 * pages),  # Max 100 per request
+                    "apiKey": NEWSAPI_KEY
+                },
+                timeout=15.0
             )
+            
+            # Handle API errors gracefully
+            if response.status_code == 401:
+                logger.error("Invalid NEWSAPI_KEY - please check your API key")
+                return NewsSearchResult(
+                    articles=[],
+                    total_results=0,
+                    timestamp=datetime.now().isoformat()
+                )
+            
             response.raise_for_status()
             data = response.json()
             
+            # Check for API errors in response
+            if data.get("status") == "error":
+                logger.error(f"NewsAPI Error: {data.get('message', 'Unknown error')}")
+                return NewsSearchResult(
+                    articles=[],
+                    total_results=0,
+                    timestamp=datetime.now().isoformat()
+                )
+            
             articles = []
-            for item in data.get("results", []):
-                # Handle cases where image_url might be missing
+            for item in data.get("articles", []):
+                # Skip articles with missing critical fields
+                if not item.get("title") or not item.get("url"):
+                    continue
+                
                 articles.append(NewsArticle(
                     title=item.get("title", ""),
                     description=item.get("description", "") or item.get("content", ""),
-                    url=item.get("link", ""),
-                    source=item.get("source_id", "Unknown"),
-                    published_at=item.get("pubDate", ""),
-                    image_url=item.get("image_url", ""),
+                    url=item.get("url", ""),
+                    source=item.get("source", {}).get("name", "Unknown"),
+                    published_at=item.get("publishedAt", ""),
+                    image_url=item.get("urlToImage", ""),
                     content=item.get("content", "")
                 ))
             
             return NewsSearchResult(
                 articles=articles,
-                total_results=len(articles),
+                total_results=data.get("totalResults", len(articles)),
                 timestamp=datetime.now().isoformat()
             )
+            
+    except httpx.TimeoutException:
+        logger.error(f"Timeout while searching news for '{query}'")
+        return NewsSearchResult(
+            articles=[],
+            total_results=0,
+            timestamp=datetime.now().isoformat()
+        )
     except Exception as e:
         logger.error(f"Error searching news for '{query}': {e}")
-        # Fallback to empty results instead of crashing
         return NewsSearchResult(
             articles=[],
             total_results=0,
@@ -122,65 +172,108 @@ async def get_top_headlines(
     limit: int = 10
 ) -> NewsSearchResult:
     """
-    Get top headlines for a category using NewsData.io API
+    Get top headlines for a category or country using NewsAPI
     
     Args:
         category: News category (business, entertainment, general, health, science, sports, technology)
-        language: Language code
-        country: Country code (optional)
-        limit: Number of articles to return
+        language: Language code (en, es, fr, de, etc.)
+        country: Country code (us, gb, ca, au, etc.) - optional
+        limit: Number of articles to return (max 100)
         
     Returns:
         NewsSearchResult with top headline articles
     """
+    if not NEWSAPI_KEY:
+        logger.error("NEWSAPI_KEY not configured")
+        return NewsSearchResult(
+            articles=[],
+            total_results=0,
+            timestamp=datetime.now().isoformat()
+        )
+    
     try:
-        # Map categories to search terms for NewsData.io
-        category_queries = {
-            "business": "business",
-            "entertainment": "entertainment",
-            "general": "latest news",
-            "health": "health",
-            "science": "science",
-            "sports": "sports",
-            "technology": "technology"
-        }
-        
-        query = category_queries.get(category, "latest news")
-        
         async with httpx.AsyncClient(timeout=15.0) as client:
+            # Validate category
+            valid_categories = [
+                "business", "entertainment", "general", "health", 
+                "science", "sports", "technology"
+            ]
+            category_lower = category.lower()
+            if category_lower not in valid_categories:
+                category_lower = "general"
+            
+            # Use top-headlines endpoint
+            params = {
+                "category": category_lower,
+                "pageSize": min(limit, 100),
+                "apiKey": NEWSAPI_KEY
+            }
+            
+            # Add country if provided
+            if country:
+                params["country"] = country
+            else:
+                # Default to US if no country specified
+                params["country"] = "us"
+            
             response = await client.get(
-                f"{NEWSDATA_API}/news",
-                params={
-                    "q": query,
-                    "language": language,
-                    "apikey": NEWSDATA_API_KEY,
-                    "sort": "publishedAt",
-                    "limit": limit
-                }
+                f"{NEWSAPI_BASE_URL}/top-headlines",
+                params=params,
+                timeout=15.0
             )
+            
+            # Handle API errors
+            if response.status_code == 401:
+                logger.error("Invalid NEWSAPI_KEY - please check your API key")
+                return NewsSearchResult(
+                    articles=[],
+                    total_results=0,
+                    timestamp=datetime.now().isoformat()
+                )
+            
             response.raise_for_status()
             data = response.json()
             
+            # Check for API errors in response
+            if data.get("status") == "error":
+                logger.error(f"NewsAPI Error: {data.get('message', 'Unknown error')}")
+                return NewsSearchResult(
+                    articles=[],
+                    total_results=0,
+                    timestamp=datetime.now().isoformat()
+                )
+            
             articles = []
-            for item in data.get("results", [])[:limit]:
+            for item in data.get("articles", [])[:limit]:
+                # Skip articles with missing critical fields
+                if not item.get("title") or not item.get("url"):
+                    continue
+                
                 articles.append(NewsArticle(
                     title=item.get("title", ""),
                     description=item.get("description", "") or item.get("content", ""),
-                    url=item.get("link", ""),
-                    source=item.get("source_id", "Unknown"),
-                    published_at=item.get("pubDate", ""),
-                    image_url=item.get("image_url", ""),
+                    url=item.get("url", ""),
+                    source=item.get("source", {}).get("name", "Unknown"),
+                    published_at=item.get("publishedAt", ""),
+                    image_url=item.get("urlToImage", ""),
                     content=item.get("content", "")
                 ))
             
             return NewsSearchResult(
                 articles=articles,
-                total_results=len(articles),
+                total_results=data.get("totalResults", len(articles)),
                 timestamp=datetime.now().isoformat()
             )
+            
+    except httpx.TimeoutException:
+        logger.error(f"Timeout while getting headlines for category '{category}'")
+        return NewsSearchResult(
+            articles=[],
+            total_results=0,
+            timestamp=datetime.now().isoformat()
+        )
     except Exception as e:
         logger.error(f"Error getting headlines for category '{category}': {e}")
-        # Fallback to empty results
         return NewsSearchResult(
             articles=[],
             total_results=0,
@@ -194,11 +287,11 @@ async def get_news_by_category(
     limit: int = 10
 ) -> NewsSearchResult:
     """
-    Get news articles by category
+    Get news articles by category (alias for get_top_headlines)
     
     Args:
-        category: News category
-        language: Language code
+        category: News category (business, entertainment, general, health, science, sports, technology)
+        language: Language code (en, es, fr, etc.)
         limit: Number of articles
         
     Returns:
@@ -217,27 +310,27 @@ def get_mcp_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "search_news",
-                "description": "Search for news articles by keyword",
+                "description": "Search for news articles by keyword using NewsAPI",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "Search query (e.g., 'artificial intelligence', 'climate change')"
+                            "description": "Search query (e.g., 'artificial intelligence', 'climate change', 'COVID-19')"
                         },
                         "language": {
                             "type": "string",
-                            "description": "Language code (default: 'en' for English)",
+                            "description": "Language code (en, es, fr, de, etc. - default: 'en')",
                             "default": "en"
                         },
                         "sort_by": {
                             "type": "string",
-                            "description": "Sort by 'publishedAt' or 'relevance'",
+                            "description": "Sort by 'publishedAt', 'relevancy', or 'popularity' (default: 'publishedAt')",
                             "default": "publishedAt"
                         },
                         "pages": {
                             "type": "integer",
-                            "description": "Number of pages (1-3, default 1)",
+                            "description": "Page number (1-5, default 1)",
                             "default": 1
                         }
                     },
@@ -249,7 +342,7 @@ def get_mcp_tools() -> list[dict]:
             "type": "function",
             "function": {
                 "name": "get_top_headlines",
-                "description": "Get top news headlines for a specific category",
+                "description": "Get top news headlines for a specific category (using NewsAPI)",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -263,9 +356,14 @@ def get_mcp_tools() -> list[dict]:
                             "description": "Language code (default: 'en')",
                             "default": "en"
                         },
+                        "country": {
+                            "type": "string",
+                            "description": "Country code (us, gb, ca, au, etc. - default: 'us')",
+                            "default": "us"
+                        },
                         "limit": {
                             "type": "integer",
-                            "description": "Number of articles (default: 10)",
+                            "description": "Number of articles (default: 10, max: 100)",
                             "default": 10
                         }
                     },
