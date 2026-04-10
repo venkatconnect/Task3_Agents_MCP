@@ -101,6 +101,15 @@ class AdvancedMetricsAnalyzer:
                 severity="warning",
                 recommendation="Focus on improving weakest metrics"
             ))
+        else:
+            # Good performance - provide positive insight
+            insights.append(PerformanceInsight(
+                title="Strong Overall Performance",
+                description=f"Pass rate is {overall_pass_rate:.1%} - Exceeds target!",
+                value=overall_pass_rate,
+                severity="info",
+                recommendation="Monitor metrics and focus on edge cases"
+            ))
         
         # Check individual metrics
         by_metric = summary.get("by_metric_type", {})
@@ -111,11 +120,29 @@ class AdvancedMetricsAnalyzer:
             
             if pass_rate < 0.8:
                 insights.append(PerformanceInsight(
-                    title=f"Low {metric_type} Pass Rate",
+                    title=f"Low {metric_type.replace('_', ' ').title()} Pass Rate",
                     description=f"{metric_type} has {pass_rate:.1%} pass rate",
                     value=pass_rate,
                     severity="warning" if pass_rate > 0.5 else "critical",
                     recommendation=f"Debug {metric_type} implementation and test cases"
+                ))
+            elif pass_rate == 1.0:
+                # Perfect score - highlight
+                insights.append(PerformanceInsight(
+                    title=f"Perfect {metric_type.replace('_', ' ').title()} Score",
+                    description=f"{metric_type} achieved 100% pass rate",
+                    value=pass_rate,
+                    severity="info",
+                    recommendation=f"Maintain {metric_type} quality; good model"
+                ))
+            else:
+                # Good but not perfect - highlight for improvement
+                insights.append(PerformanceInsight(
+                    title=f"Good {metric_type.replace('_', ' ').title()} Performance",
+                    description=f"{metric_type} has {pass_rate:.1%} pass rate ({stats.get('passed')}/{stats.get('total')} tests)",
+                    value=pass_rate,
+                    severity="info",
+                    recommendation=f"Minor improvements needed for {metric_type}"
                 ))
             
             if avg_score < 0.8:
@@ -147,14 +174,14 @@ class AdvancedMetricsAnalyzer:
         if not by_metric:
             return {}
         
-        # Find best and worst performers
-        metric_scores = {
-            name: stats.get("average_score", 0)
+        # Find best and worst performers by pass rate
+        metric_pass_rates = {
+            name: stats.get("pass_rate", 0)
             for name, stats in by_metric.items()
         }
         
-        best_metric = max(metric_scores, key=metric_scores.get)
-        worst_metric = min(metric_scores, key=metric_scores.get)
+        best_metric = max(metric_pass_rates, key=metric_pass_rates.get)
+        worst_metric = min(metric_pass_rates, key=metric_pass_rates.get)
         
         # Find best and worst categories
         by_category = summary.get("by_category", {})
@@ -166,11 +193,11 @@ class AdvancedMetricsAnalyzer:
         return {
             "best_performing_metric": {
                 "name": best_metric,
-                "score": metric_scores[best_metric]
+                "pass_rate": metric_pass_rates[best_metric]
             },
             "worst_performing_metric": {
                 "name": worst_metric,
-                "score": metric_scores[worst_metric]
+                "pass_rate": metric_pass_rates[worst_metric]
             },
             "best_performing_category": {
                 "name": max(category_rates, key=category_rates.get) if category_rates else None,
@@ -180,7 +207,7 @@ class AdvancedMetricsAnalyzer:
                 "name": min(category_rates, key=category_rates.get) if category_rates else None,
                 "pass_rate": min(category_rates.values()) if category_rates else 0
             },
-            "metric_spread": max(metric_scores.values()) - min(metric_scores.values()) if metric_scores else 0
+            "metric_spread": max(metric_pass_rates.values()) - min(metric_pass_rates.values()) if metric_pass_rates else 0
         }
     
     def generate_trend_analysis(
@@ -297,10 +324,16 @@ if __name__ == "__main__":
     
     # Example summary
     example_summary = {
-        "overall_pass_rate": 0.88,
-        "overall_average_score": 0.85,
+        "overall_pass_rate": 0.90,
+        "overall_average_score": 0.88,
         "by_metric_type": {
             "classification": {
+                "passed": 10,
+                "total": 10,
+                "pass_rate": 1.0,
+                "average_score": 1.0
+            },
+            "tool_usage": {
                 "passed": 10,
                 "total": 10,
                 "pass_rate": 1.0,
@@ -310,19 +343,28 @@ if __name__ == "__main__":
                 "passed": 8,
                 "total": 10,
                 "pass_rate": 0.8,
-                "average_score": 0.82
+                "average_score": 0.85
             },
             "relevance": {
                 "passed": 9,
                 "total": 10,
                 "pass_rate": 0.9,
-                "average_score": 0.88
+                "average_score": 0.91
+            },
+            "data_validity": {
+                "passed": 8,
+                "total": 10,
+                "pass_rate": 0.8,
+                "average_score": 0.82
             }
         },
         "by_category": {
-            "weather": {"passed": 3, "total": 3},
-            "news": {"passed": 5, "total": 6},
-            "combined": {"passed": 2, "total": 2}
+            "basic_weather": {"passed": 1, "total": 1},
+            "weather_forecast": {"passed": 2, "total": 2},
+            "category_news": {"passed": 3, "total": 3},
+            "keyword_search": {"passed": 1, "total": 1},
+            "multi_agent": {"passed": 2, "total": 2},
+            "edge_cases": {"passed": 1, "total": 1}
         }
     }
     
@@ -331,19 +373,52 @@ if __name__ == "__main__":
     recommendations = analyzer.generate_recommendations(insights)
     comparison = analyzer.compare_metrics(example_summary)
     
-    print("Advanced Metrics Analysis")
-    print("=" * 60)
-    print(f"\nTotal Insights: {len(insights)}")
-    for insight in insights:
-        print(f"\n📊 {insight.title}")
-        print(f"   {insight.description}")
+    # Metric scores for distribution analysis
+    all_scores = []
+    for metric_data in example_summary.get("by_metric_type", {}).values():
+        all_scores.append(metric_data.get("average_score", 0))
+    distribution = analyzer.analyze_metric_distribution(all_scores)
+    
+    print("\n" + "=" * 70)
+    print("📊 ADVANCED METRICS ANALYSIS REPORT")
+    print("=" * 70)
+    
+    print(f"\n🎯 OVERALL PERFORMANCE")
+    print(f"   Pass Rate: {example_summary['overall_pass_rate']:.1%} ({int(example_summary['overall_pass_rate']*50)}/50)")
+    print(f"   Average Score: {example_summary['overall_average_score']:.2f}/1.0")
+    
+    print(f"\n📈 SCORE DISTRIBUTION")
+    if distribution:
+        print(f"   Mean: {distribution.get('mean', 0):.2f}")
+        print(f"   Median: {distribution.get('median', 0):.2f}")
+        print(f"   Std Dev: {distribution.get('stdev', 0):.2f}")
+        print(f"   Range: {distribution.get('min', 0):.2f} - {distribution.get('max', 0):.2f}")
+    
+    print(f"\n💡 KEY INSIGHTS ({len(insights)})")
+    for i, insight in enumerate(insights, 1):
+        severity_icon = {"critical": "🔴", "warning": "🟡", "info": "🔵"}.get(insight.severity, "⚪")
+        print(f"\n   {i}. {severity_icon} {insight.title}")
+        print(f"      {insight.description}")
         if insight.recommendation:
-            print(f"   ✓ {insight.recommendation}")
+            print(f"      → {insight.recommendation}")
     
-    print(f"\n\nRecommendations ({len(recommendations)}):")
+    print(f"\n✅ RECOMMENDATIONS ({len(recommendations)})")
     for i, rec in enumerate(recommendations, 1):
-        print(f"  {i}. {rec}")
+        print(f"   {i}. {rec}")
     
-    print(f"\n\nComparative Analysis:")
-    print(f"  Best: {comparison['best_performing_metric']['name']}")
-    print(f"  Worst: {comparison['worst_performing_metric']['name']}")
+    print(f"\n🔄 COMPARATIVE ANALYSIS")
+    if comparison:
+        best = comparison.get('best_performing_metric', {})
+        worst = comparison.get('worst_performing_metric', {})
+        print(f"   ⭐ Best: {best.get('name', 'N/A')} ({best.get('pass_rate', 0):.1%})")
+        print(f"   ⚠️  Needs Work: {worst.get('name', 'N/A')} ({worst.get('pass_rate', 0):.1%})")
+    
+    print(f"\n📂 BY CATEGORY")
+    for category, stats in example_summary.get("by_category", {}).items():
+        cat_name = category.replace("_", " ").title()
+        rate = stats.get("passed") / stats.get("total") if stats.get("total") > 0 else 0
+        print(f"   {cat_name}: {stats.get('passed')}/{stats.get('total')} ({rate:.0%})")
+    
+    print("\n" + "=" * 70)
+    print("✨ Analysis complete!")
+    print("=" * 70 + "\n")
